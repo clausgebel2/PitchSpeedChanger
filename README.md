@@ -10,7 +10,6 @@ The application plays audio files (mp3, ogg, wav) with changeable pitch and spee
 ## Usage
 
 python pitchSpeedChanger.py [-h] [-p PITCH] [-s SPEED] filename  
-python pitchSpeedChanger.py: error: the following arguments are required: filename
 
 
 ## License
