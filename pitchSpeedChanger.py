@@ -20,6 +20,7 @@ limitations under the License.
 import sys
 import gi
 import argparse
+import signal
 from gi.repository import GLib
 
 gi.require_version("Gst", "1.0")
@@ -45,6 +46,7 @@ class AudioPlayer:
 
         self.create_pipeline_bus()
         self.run_loop()
+        
 
 
     def create_pipeline(self) -> Gst.Pipeline:
@@ -72,7 +74,7 @@ class AudioPlayer:
     def create_audio_converter(self) -> Gst.Element:
         audio_converter = Gst.ElementFactory.make("audioconvert")
         if not audio_converter:
-            raise RuntimeError("Error: couldn't create GStreamer audio decoder.")
+            raise RuntimeError("Error: couldn't create GStreamer audio converter.")
         return audio_converter
 
 
@@ -115,6 +117,7 @@ class AudioPlayer:
         if not sink_pad.is_linked():
             pad.link(sink_pad)        
 
+
     def connect_decoder_with_converter_pitch_speed(self):
         self.audio_decoder.connect("pad-added", self.on_pad_added, self.audio_converter, self.audio_pitch_element, self.audio_speed_element)
         self.audio_converter.link(self.audio_pitch_element)
@@ -142,12 +145,23 @@ class AudioPlayer:
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self.on_message, self.pipeline)
+        signal.signal(signal.SIGINT, self.strg_c_or_strg_z_pressed) # Ctrl + C pressed
+        signal.signal(signal.SIGTSTP, self.strg_c_or_strg_z_pressed) # Ctrl + Z pressed
         return bus
 
 
     def run_loop(self):
         loop = GLib.MainLoop()
         loop.run()
+
+
+    def strg_c_or_strg_z_pressed(self, sig, frame):
+        print("\rAudio stopped.")
+        if self.loop is not None: 
+            self.loop.quit()
+        if self.pipeline is not None: 
+            self.pipeline.set_state(Gst.State.NULL)
+        exit()
 
 
 if __name__ == "__main__":
