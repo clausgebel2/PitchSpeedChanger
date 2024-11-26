@@ -15,4 +15,4 @@ python pitchSpeedChanger.py --help
 
 ## License
 
-This application *Audible Authentication Code* is distributed under the terms of the Apache License, version 2 or later. See the LICENSE.txt file for details.
+This application *Pitch And Speed Changer* is distributed under the terms of the Apache License, version 2 or later. See the LICENSE.txt file for details.
