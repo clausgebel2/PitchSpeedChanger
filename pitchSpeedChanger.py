@@ -25,95 +25,139 @@ from gi.repository import GLib
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GObject
 
-Gst.init(None)
+class AudioPlayer:
+    def __init__(self, filename: str, speed: float, pitch: float):
+        Gst.init(None)
+        self.loop = None
+        self.filename = filename
+        self.pipeline = self.create_pipeline()
+        self.source = self.set_source(self.filename)
+        self.audio_decoder = self.create_audio_decoder()
+        self.audio_converter = self.create_audio_converter()
+        self.audio_pitch_element = self.create_audio_pitch_element()
+        self.audio_speed_element = self.create_audio_speed_element()
+        self.audio_output = self.create_output()
+
+        self.add_elements_to_pipeline()
+        self.connect_source_with_decoder()
+        self.connect_decoder_with_converter_pitch_speed()
+        self.play(speed, pitch)
+
+        self.create_pipeline_bus()
+        self.run_loop()
 
 
-def play_mp3(filename, pitch=None, speed=None):
-    global loop
-    pipeline = Gst.Pipeline.new("audio-player")
-    source = Gst.ElementFactory.make("filesrc")
-    source.set_property("location", filename)
+    def create_pipeline(self) -> Gst.Pipeline:
+        pipeline = Gst.Pipeline.new("audio-player")
+        if not pipeline:
+            raise RuntimeError("Error: couldn't create GStreamer audio player pipeline.")
+        return pipeline
 
-    decode = Gst.ElementFactory.make("decodebin")
-    convert = Gst.ElementFactory.make("audioconvert")
-    pitch_element = Gst.ElementFactory.make("pitch")
-    speed_element = Gst.ElementFactory.make("speed")
-
-    sink = Gst.ElementFactory.make("autoaudiosink")
-
-    if (
-        not pipeline
-        or not source
-        or not decode
-        or not convert
-        or not pitch_element
-        or not speed_element
-        or not sink
-    ):
-        print("Error: audio file cannot be played.")
-        return
-
-    pipeline.add(source)
-    pipeline.add(decode)
-    pipeline.add(convert)
-    pipeline.add(pitch_element)
-    pipeline.add(speed_element)
-    pipeline.add(sink)
-
-    source.link(decode)
-    decode.connect("pad-added", on_pad_added, convert, pitch_element, speed_element)
-    convert.link(pitch_element)
-    pitch_element.link(speed_element)
-    speed_element.link(sink)
-
-    if speed:
-        speed_element.set_property("speed", speed)
-        pitch = 1.0 / speed if pitch is None else pitch / speed
-    if pitch:
-        pitch_element.set_property("pitch", pitch)
-
-    pipeline.set_state(Gst.State.PLAYING)
-
-    bus = pipeline.get_bus()
-    bus.add_signal_watch()
-    bus.connect("message", on_message, pipeline)
-
-    loop = GLib.MainLoop()
-    loop.run()
+    
+    def set_source(self, filename: str) -> Gst.Element:
+        source = Gst.ElementFactory.make("filesrc")
+        source.set_property("location", filename)
+        if not source:
+            raise RuntimeError("Error: couldn't set GStreamer source file.")
+        return source
 
 
-def on_pad_added(decodebin, pad, convert, pitch, speed):
-    sink_pad = convert.get_static_pad("sink")
-    if not sink_pad.is_linked():
-        pad.link(sink_pad)
+    def create_audio_decoder(self) -> Gst.Element:     
+        audio_decoder = Gst.ElementFactory.make("decodebin")
+        if not audio_decoder:
+            raise RuntimeError("Error: couldn't create GStreamer audio decoder.")
+        return audio_decoder
 
 
-def on_message(bus, message, pipeline):
-    global loop
-    if message.type == Gst.MessageType.EOS or message.type == Gst.MessageType.ERROR:
-        pipeline.set_state(Gst.State.NULL)
-        loop.quit()
+    def create_audio_converter(self) -> Gst.Element:
+        audio_converter = Gst.ElementFactory.make("audioconvert")
+        if not audio_converter:
+            raise RuntimeError("Error: couldn't create GStreamer audio decoder.")
+        return audio_converter
+
+
+    def create_audio_pitch_element(self) -> Gst.Element:
+        audio_pitch = Gst.ElementFactory.make("pitch")
+        if not audio_pitch:
+            raise RuntimeError("Error: couldn't create GStreamer audio pitch.")
+        return audio_pitch
+
+
+    def create_audio_speed_element(self) -> Gst.Element:
+        audio_speed = Gst.ElementFactory.make("speed")
+        if not audio_speed:
+            raise RuntimeError("Error: couldn't create GStreamer audio speed.")
+        return audio_speed
+
+
+    def create_output(self) -> Gst.Element:
+        audio_sink = Gst.ElementFactory.make("autoaudiosink")
+        if not audio_sink:
+            raise RuntimeError("Error: couldn't create GStreamer output element.")
+        return audio_sink
+
+
+    def add_elements_to_pipeline(self):
+        self.pipeline.add(self.source)
+        self.pipeline.add(self.audio_decoder)
+        self.pipeline.add(self.audio_converter)
+        self.pipeline.add(self.audio_pitch_element)
+        self.pipeline.add(self.audio_speed_element)
+        self.pipeline.add(self.audio_output)
+
+
+    def connect_source_with_decoder(self):
+        self.source.link(self.audio_decoder)
+
+
+    def on_pad_added(self, decodebin: Gst.Element, pad: Gst.Pad, audio_converter: Gst.Element, pitch: Gst.Element, speed: Gst.Element):
+        sink_pad = self.audio_converter.get_static_pad("sink")
+        if not sink_pad.is_linked():
+            pad.link(sink_pad)        
+
+    def connect_decoder_with_converter_pitch_speed(self):
+        self.audio_decoder.connect("pad-added", self.on_pad_added, self.audio_converter, self.audio_pitch_element, self.audio_speed_element)
+        self.audio_converter.link(self.audio_pitch_element)
+        self.audio_pitch_element.link(self.audio_speed_element)
+        self.audio_speed_element.link(self.audio_output)
+
+
+    def play(self, speed=None, pitch=None):
+        if speed:
+            self.audio_speed_element.set_property("speed", speed)
+            pitch = 1.0 / speed if pitch is None else pitch / speed
+        if pitch:
+            self.audio_pitch_element.set_property("pitch", pitch)
+
+        self.pipeline.set_state(Gst.State.PLAYING)
+
+
+    def on_message(self, bus, message, pipeline):
+        if message.type == Gst.MessageType.EOS or message.type == Gst.MessageType.ERROR:
+            pipeline.set_state(Gst.State.NULL)
+            self.loop.quit()
+
+
+    def create_pipeline_bus(self) -> Gst.Bus:
+        bus = self.pipeline.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message, self.pipeline)
+        return bus
+
+
+    def run_loop(self):
+        loop = GLib.MainLoop()
+        loop.run()
 
 
 if __name__ == "__main__":
-    
     parser = argparse.ArgumentParser(
         description="Play an MP3 file with pitch and speed adjustments."
     )
     parser.add_argument("filename", type=str, help="The MP3 file to play.")
-    parser.add_argument(
-        "-p",
-        "--pitch",
-        type=float,
-        help="Pitch adjustment, e.g., 0.5 for half pitch, 2.0 for double pitch.",
-    )
-    parser.add_argument(
-        "-s",
-        "--speed",
-        type=float,
-        help="Speed adjustment, e.g., 1.5 to speed up the audio file by 50%%.",
-    )
+    parser.add_argument("-p", "--pitch", type=float, help="Modifies audio pitch, e.g., 0.5 for half pitch, 2.0 for double pitch.",)
+    parser.add_argument("-s", "--speed", type=float, help="Modifies audio speed, e.g., 1.5 to speed up the audio file by 50%%.",)
 
     args = parser.parse_args()
 
-    play_mp3(args.filename, args.pitch, args.speed)
+    AudioPlayer(args.filename, args.speed, args.pitch)
