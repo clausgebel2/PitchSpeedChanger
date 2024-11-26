@@ -4,7 +4,6 @@ The application plays audio files (mp3, ogg, wav) with changeable pitch and spee
 ## Requirement
 
 - PyGI (PyGObject)  
-- PyQt6  
 - GStreamer 1.0 (Bad Plug-ins)  
 
 
